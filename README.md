@@ -6,6 +6,8 @@ Technical dashboard for time-series analysis and forecasting.
 
 This application implements a forecasting pipeline using the [Prophet](https://facebook.github.io/prophet/) library. The interface is built with [Streamlit](https://streamlit.io/).
 
+**Live Demo:** [Streamlit App](https://jorgeasmz-dashboard-forecasting.streamlit.app/)
+
 The system performs the following operations:
 1.  **Data Ingestion**: Loads time-series data from CSV sources.
 2.  **Preprocessing**: Standardizes date formats and prepares data frames for the Prophet model.
