@@ -1,10 +1,11 @@
 import streamlit as st
-import pandas as pd
+
 from src.config import APP_TITLE, DATE_COLUMN_RAW, SALES_COLUMN_RAW
-from src.loader import load_data
-from src.processing import prepare_for_prophet
 from src.forecasting import Forecaster
-from src.plotting import plot_raw_data, plot_forecast, plot_components
+from src.loader import load_data
+from src.plotting import plot_components, plot_forecast, plot_raw_data
+from src.processing import prepare_for_prophet
+
 
 def main():
     st.set_page_config(page_title=APP_TITLE, layout="wide")

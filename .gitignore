@@ -8,3 +8,9 @@ env/
 venv/
 .env
 .ipynb_checkpoints/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
