@@ -1,5 +1,6 @@
-from prophet import Prophet
 import pandas as pd
+from prophet import Prophet
+
 
 class Forecaster:
     def __init__(self):
@@ -21,7 +22,7 @@ class Forecaster:
             periods (int): Number of periods to forecast forward.
             freq (str): Frequency of the data (e.g., 'D' for daily, 'MS' for Month Start).
         """
-        if not self.model:
+        if self.model is None:
             raise ValueError("Model has not been trained yet.")
             
         future = self.model.make_future_dataframe(periods=periods, freq=freq)
