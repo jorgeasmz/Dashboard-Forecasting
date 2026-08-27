@@ -14,3 +14,12 @@ venv/
 .coverage
 htmlcov/
 .ruff_cache/
+
+# Local database
+*.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
