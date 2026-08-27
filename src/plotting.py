@@ -1,65 +1,75 @@
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objs as go
 
-# Okabe-Ito blue: colourblind-safe and the tone Prophet itself uses.
-FORECAST_COLOUR = "rgb(0, 114, 178)"
-INTERVAL_COLOUR = "rgba(0, 114, 178, 0.2)"
+from src.config import INTERVAL_WIDTH
+
+OBSERVED = "rgb(70, 90, 110)"
+FORECAST = "rgb(0, 114, 178)"
+INTERVAL = "rgba(0, 114, 178, 0.2)"
 
 
-def plot_raw_data(df: pd.DataFrame, date_col: str, value_col: str):
-    """
-    Plots the historical raw data using Plotly Express.
-    """
-    fig = px.line(df, x=date_col, y=value_col, title='Historical Sales Data')
-    fig.update_layout(xaxis_title='Date', yaxis_title='Sales')
-    return fig
-
-
-def plot_forecast(model, forecast: pd.DataFrame):
-    """
-    Plots observed history, prediction and uncertainty interval.
-
-    Built with graph_objects rather than prophet.plot.plot_plotly, which fails
-    on a fitted model: it runs `assert m.history` on a DataFrame, and pandas
-    raises ValueError instead of evaluating truthiness.
-    """
-    fig = go.Figure()
+def plot_forecast(history: pd.DataFrame, forecast: pd.DataFrame, unit: str) -> go.Figure:
+    """History, prediction and the uncertainty band around it."""
+    figure = go.Figure()
 
     # Interval first, so the lines are drawn on top of the shaded band.
-    fig.add_trace(go.Scatter(
-        x=forecast['ds'], y=forecast['yhat_upper'],
-        mode='lines', line={'width': 0},
-        showlegend=False, hoverinfo='skip', name='Upper bound',
+    figure.add_trace(go.Scatter(
+        x=forecast["ds"], y=forecast["yhat_upper"], mode="lines",
+        line={"width": 0}, showlegend=False, hoverinfo="skip", name="Upper bound",
     ))
-    fig.add_trace(go.Scatter(
-        x=forecast['ds'], y=forecast['yhat_lower'],
-        mode='lines', line={'width': 0},
-        fill='tonexty', fillcolor=INTERVAL_COLOUR,
-        hoverinfo='skip', name='Uncertainty interval',
+    figure.add_trace(go.Scatter(
+        x=forecast["ds"], y=forecast["yhat_lower"], mode="lines",
+        line={"width": 0}, fill="tonexty", fillcolor=INTERVAL,
+        hoverinfo="skip", name=f"{INTERVAL_WIDTH:.0%} interval",
     ))
-    fig.add_trace(go.Scatter(
-        x=forecast['ds'], y=forecast['yhat'],
-        mode='lines', line={'color': FORECAST_COLOUR}, name='Forecast',
+    figure.add_trace(go.Scatter(
+        x=forecast["ds"], y=forecast["yhat"], mode="lines",
+        line={"color": FORECAST}, name="Forecast",
     ))
-    fig.add_trace(go.Scatter(
-        x=model.history['ds'], y=model.history['y'],
-        mode='markers', marker={'color': 'black', 'size': 4}, name='Observed',
+    figure.add_trace(go.Scatter(
+        x=history["ds"], y=history["y"], mode="lines",
+        line={"color": OBSERVED, "width": 1.4}, name="Observed",
     ))
 
-    fig.update_layout(
-        title="Sales Forecast",
-        xaxis_title="Date",
-        yaxis_title="Sales Prediction",
+    figure.update_layout(
+        xaxis_title="Date", yaxis_title=unit, height=430,
+        margin={"t": 30, "b": 40}, hovermode="x unified",
     )
-    return fig
+    return figure
 
 
-def plot_components(forecast: pd.DataFrame):
-    """
-    Manually creates component plots (trend) using Plotly.
-    """
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['trend'], mode='lines', name='Trend'))
-    fig.update_layout(title="Forecast Trend Component", xaxis_title="Date", yaxis_title="Trend")
-    return fig
+def plot_accuracy(summary: pd.DataFrame) -> go.Figure:
+    """Mean MASE per model against the seasonal naive baseline at 1.0."""
+    figure = go.Figure(go.Bar(
+        x=summary["model"], y=summary["mase"],
+        marker={"color": ["#1e8449" if v < 1 else "#c0392b" for v in summary["mase"]]},
+        hovertemplate="MASE %{y:.3f}<extra></extra>",
+    ))
+    figure.add_hline(
+        y=1.0, line={"color": "#555", "dash": "dash"},
+        annotation_text="seasonal naive", annotation_position="top left",
+    )
+    figure.update_layout(
+        title="Forecast error, scaled", yaxis_title="MASE",
+        showlegend=False, height=340, margin={"t": 50, "b": 40},
+    )
+    return figure
+
+
+def plot_coverage(summary: pd.DataFrame) -> go.Figure:
+    """Observed interval coverage against the nominal level."""
+    figure = go.Figure(go.Bar(
+        x=summary["model"], y=summary["coverage"],
+        marker={"color": "rgb(0, 114, 178)"},
+        hovertemplate="%{y:.0%}<extra></extra>",
+    ))
+    figure.add_hline(
+        y=INTERVAL_WIDTH, line={"color": "#555", "dash": "dash"},
+        annotation_text=f"nominal {INTERVAL_WIDTH:.0%}", annotation_position="top left",
+    )
+    figure.update_layout(
+        title="Interval coverage", yaxis_title="Share of actuals inside",
+        yaxis={"tickformat": ".0%", "range": [0, 1.05]},
+        showlegend=False, height=340, margin={"t": 50, "b": 40},
+    )
+    return figure

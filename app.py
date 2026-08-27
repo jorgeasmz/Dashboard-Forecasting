@@ -1,94 +1,117 @@
+import pandas as pd
 import streamlit as st
+from sqlalchemy.exc import SQLAlchemyError
 
-from src.config import APP_TITLE, DATE_COLUMN_RAW, SALES_COLUMN_RAW
-from src.forecasting import Forecaster
-from src.loader import load_data
-from src.plotting import plot_components, plot_forecast, plot_raw_data
-from src.processing import prepare_for_prophet
+from src.config import APP_TITLE, INTERVAL_WIDTH
+from src.database import SessionLocal
+from src.ingest import load_observations
+from src.plotting import plot_accuracy, plot_coverage, plot_forecast
+from src.schema import Series
+from src.selection import aggregate
+from src.serving import forecast
+
+st.set_page_config(page_title=APP_TITLE, layout="wide")
 
 
-def main():
-    st.set_page_config(page_title=APP_TITLE, layout="wide")
-    st.title(APP_TITLE)
-    
-    # 1. Load Data
-    with st.spinner('Loading data...'):
-        df = load_data()
-        
-    if df.empty:
-        st.warning("No data found or error loading data.")
-        return
+@st.cache_resource
+def session_factory():
+    """One session factory per Streamlit process."""
+    return SessionLocal
 
-    # Sidebar Controls
-    st.sidebar.header("Configuration")
-    show_raw_data = st.sidebar.checkbox("Show Raw Data", value=False)
-    
-    forecast_horizon = st.sidebar.slider(
-        "Forecast Horizon (Months)", 
-        min_value=1, 
-        max_value=36, 
-        value=12
+
+@st.cache_data(ttl=300)
+def registered_series() -> list[dict] | None:
+    """Registered series, or None when the schema has not been created yet."""
+    try:
+        with session_factory()() as session:
+            return [
+                {
+                    "slug": s.slug, "name": s.name, "unit": s.unit,
+                    "frequency": s.frequency, "horizon": s.horizon,
+                }
+                for s in session.query(Series).order_by(Series.slug)
+            ]
+    except SQLAlchemyError:
+        return None
+
+
+@st.cache_data(ttl=300)
+def series_data(slug: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    with session_factory()() as session:
+        return load_observations(session, slug), aggregate(session, slug)
+
+
+@st.cache_data(ttl=300)
+def series_forecast(slug: str, horizon: int) -> tuple[str, pd.DataFrame]:
+    with session_factory()() as session:
+        return forecast(session, slug, horizon)
+
+
+st.title(APP_TITLE)
+
+available = registered_series()
+if available is None:
+    st.error("Could not read the database. Has `alembic upgrade head` been run?")
+    st.stop()
+if not available:
+    st.warning("No series ingested yet. Run `python -m src.pipeline` first.")
+    st.stop()
+
+labels = {item["slug"]: item["name"] for item in available}
+slug = st.sidebar.selectbox(
+    "Series", list(labels), format_func=lambda key: labels[key]
+)
+source = next(item for item in available if item["slug"] == slug)
+horizon = st.sidebar.slider(
+    "Forecast horizon", 1, source["horizon"] * 3, source["horizon"],
+    help="Steps ahead, in the series' own frequency",
+)
+
+history, summary = series_data(slug)
+unit = source["unit"]
+
+if summary.empty:
+    st.warning("This series has no backtest results. Run `python -m src.pipeline`.")
+    st.stop()
+
+selected = str(summary.iloc[0]["model"])
+
+top = st.columns(4)
+top[0].metric("Observations", len(history))
+top[1].metric("Frequency", source["frequency"])
+top[2].metric("Selected model", selected)
+top[3].metric("MASE", f"{summary.iloc[0]['mase']:.3f}")
+
+with st.spinner(f"Forecasting with {selected}..."):
+    model, prediction = series_forecast(slug, horizon)
+
+st.plotly_chart(plot_forecast(history, prediction, unit), width="stretch")
+
+st.subheader("Rolling-origin backtest")
+st.caption(
+    f"Four folds, horizon {source['horizon']}. MASE scales the error against the "
+    "seasonal naive, so 1.0 means the model matched it and above 1.0 means it lost."
+)
+
+left, right = st.columns(2)
+left.plotly_chart(plot_accuracy(summary), width="stretch")
+right.plotly_chart(plot_coverage(summary), width="stretch")
+
+st.dataframe(
+    summary.rename(columns={
+        "model": "Model", "folds": "Folds", "mae": "MAE",
+        "rmse": "RMSE", "mase": "MASE", "coverage": "Coverage",
+    }).style.format({
+        "MAE": "{:.2f}", "RMSE": "{:.2f}", "MASE": "{:.3f}", "Coverage": "{:.0%}",
+    }),
+    width="stretch",
+    hide_index=True,
+)
+
+worst = summary["coverage"].min()
+if worst < INTERVAL_WIDTH - 0.15:
+    st.info(
+        f"Nominal interval width is {INTERVAL_WIDTH:.0%}, and the weakest model here "
+        f"captures {worst:.0%} of actual values. A point forecast without a calibrated "
+        "interval overstates how much is known about the future."
     )
-
-    # 2. EDA Section
-    st.subheader("1. Historical Data Explorer")
-    
-    # Metrics
-    total_sales = df[SALES_COLUMN_RAW].sum()
-    avg_sales = df[SALES_COLUMN_RAW].mean()
-    col1, col2 = st.columns(2)
-    col1.metric("Total Historical Sales", f"{total_sales:,.0f}")
-    col2.metric("Average Monthly Sales", f"{avg_sales:,.0f}")
-
-    # Plot Raw Data
-    st.plotly_chart(plot_raw_data(df, DATE_COLUMN_RAW, SALES_COLUMN_RAW), width='stretch')
-
-    if show_raw_data:
-        st.dataframe(df)
-
-    # 3. Forecasting Section
-    st.subheader("2. Future Forecast")
-    
-    if st.button("Generate Forecast"):
-        with st.spinner('Training model and generating forecast...'):
-            # Prepare data
-            prophet_df = prepare_for_prophet(df)
-            
-            # Train model
-            forecaster = Forecaster()
-            forecaster.train(prophet_df)
-            
-            # Predict
-            forecast = forecaster.predict(periods=forecast_horizon)
-            
-            # Visualizations
-            st.markdown(f"### Forecast for the next {forecast_horizon} months")
-            
-            # Main Forecast Plot
-            fig_forecast = plot_forecast(forecaster.model, forecast)
-            st.plotly_chart(fig_forecast, width='stretch')
-            
-            # Components Plot
-            st.markdown("### Trend Analysis")
-            fig_components = plot_components(forecast)
-            st.plotly_chart(fig_components, width='stretch')
-            
-            # Download Data
-            st.markdown("### Download Results")
-            # Filter only future dates for the download
-            last_hist_date = prophet_df['ds'].max()
-            future_df = forecast[forecast['ds'] > last_hist_date][['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
-            
-            csv = future_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "Download Forecast CSV",
-                csv,
-                "forecast.csv",
-                "text/csv",
-                key='download-csv'
-            )
-
-    st.markdown("---")
-
-if __name__ == "__main__":
-    main()

@@ -9,6 +9,21 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: forecasting
+          POSTGRES_PASSWORD: forecasting
+          POSTGRES_DB: forecasting
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U forecasting"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -28,3 +43,10 @@ jobs:
 
       - name: Test
         run: pytest
+
+      # The suite runs on SQLite for speed; this proves the same migrations apply
+      # to the engine the service actually deploys against.
+      - name: Apply migrations on PostgreSQL
+        env:
+          DATABASE_URL: postgresql+psycopg://forecasting:forecasting@localhost:5432/forecasting
+        run: alembic upgrade head

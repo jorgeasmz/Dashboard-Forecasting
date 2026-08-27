@@ -1,40 +1,31 @@
-import pandas as pd
-import pytest
 from plotly.graph_objs import Figure
 
-from src.config import DATE_COLUMN_RAW, SALES_COLUMN_RAW
-from src.forecasting import Forecaster
-from src.plotting import plot_components, plot_forecast, plot_raw_data
+from src.plotting import plot_accuracy, plot_coverage, plot_forecast
+from src.selection import aggregate
 
 
-def test_plot_raw_data_builds_a_single_series_figure(raw_df):
-    fig = plot_raw_data(raw_df, DATE_COLUMN_RAW, SALES_COLUMN_RAW)
+def test_forecast_figure_draws_history_prediction_and_interval(history, source):
+    from src.forecasters import SeasonalNaive
 
-    assert isinstance(fig, Figure)
-    assert len(fig.data) == 1
+    forecast = SeasonalNaive(12).fit(history).predict(6, "MS")
 
+    figure = plot_forecast(history, forecast, "units")
 
-def test_plot_components_plots_the_trend():
-    forecast = pd.DataFrame({
-        "ds": pd.date_range("2020-01-01", periods=6, freq="MS"),
-        "trend": [1, 2, 3, 4, 5, 6],
-    })
-
-    fig = plot_components(forecast)
-
-    assert isinstance(fig, Figure)
-    assert fig.data[0].name == "Trend"
+    assert isinstance(figure, Figure)
+    assert [trace.name for trace in figure.data] == [
+        "Upper bound", "80% interval", "Forecast", "Observed"
+    ]
 
 
-@pytest.mark.slow
-def test_plot_forecast_draws_history_prediction_and_interval(monthly_series):
-    """Regression guard: prophet.plot.plot_plotly raises on a fitted model."""
-    forecaster = Forecaster()
-    forecaster.train(monthly_series)
-    forecast = forecaster.predict(periods=3)
+def test_accuracy_figure_marks_the_baseline(session, populated):
+    figure = plot_accuracy(aggregate(session, populated.slug))
 
-    fig = plot_forecast(forecaster.model, forecast)
+    assert isinstance(figure, Figure)
+    assert any(shape.y0 == 1.0 for shape in figure.layout.shapes)
 
-    assert isinstance(fig, Figure)
-    names = [trace.name for trace in fig.data]
-    assert names == ["Upper bound", "Uncertainty interval", "Forecast", "Observed"]
+
+def test_coverage_figure_marks_the_nominal_level(session, populated):
+    figure = plot_coverage(aggregate(session, populated.slug))
+
+    assert isinstance(figure, Figure)
+    assert any(shape.y0 == 0.80 for shape in figure.layout.shapes)
