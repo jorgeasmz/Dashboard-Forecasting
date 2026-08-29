@@ -61,10 +61,7 @@ beats the baseline.
 
 ### Car sales
 
-This series is the one the project previously used on its own, evaluated on a
-single split of the final twelve months. Under that split Prophet reduced the
-error of the seasonal naive by roughly a third. Across four folds the ordering
-reverses:
+Over four folds no model family improves on the seasonal naive:
 
 | Model | MASE | MAE | Coverage |
 |---|---:|---:|---:|
@@ -73,7 +70,10 @@ reverses:
 | lightgbm | 1.130 | 1,801.69 | 46% |
 | sarima | 1.306 | 2,086.20 | 67% |
 
-The earlier result held for one window and did not generalise to the others.
+Measured instead on a single split of the final twelve months, the ordering
+inverts: Prophet reaches 0.866 and the seasonal naive 1.270. Four folds average
+over four cutoffs, so a ranking obtained from one window does not carry to the
+others.
 
 ### Interval calibration
 
@@ -173,9 +173,8 @@ on the database alone.
 Fitting cost grows with the seasonal period, and a 365-day cycle is not
 tractable in this configuration.
 
-**Migrations own the schema.** Alembic runs before the service starts. The
-project previously had no persistence at all, so the schema is versioned from
-its first revision.
+**Migrations own the schema.** Alembic runs before the service starts, and the
+schema is versioned from its first revision.
 
 ## Project structure
 
