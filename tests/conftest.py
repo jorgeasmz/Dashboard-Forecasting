@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from api.main import app
-from src.config import SeriesSource
+from src.config import PublishedCsv, SeriesSource
 from src.database import Base, get_session
 from src.schema import Evaluation, Observation, Series
 
@@ -17,9 +17,7 @@ def source() -> SeriesSource:
     return SeriesSource(
         slug="test-series",
         name="Test series",
-        filename="test.csv",
-        date_column="Month",
-        value_column="Value",
+        origin=PublishedCsv("test.csv", "Month", "Value"),
         frequency="MS",
         seasonal_period=12,
         horizon=6,
@@ -40,7 +38,9 @@ def history() -> pd.DataFrame:
 def csv_file(tmp_path, history, source):
     """The same series written out in its published layout."""
     path = tmp_path / "test.csv"
-    frame = history.rename(columns={"ds": source.date_column, "y": source.value_column})
+    frame = history.rename(
+        columns={"ds": source.origin.date_column, "y": source.origin.value_column}
+    )
     frame.to_csv(path, index=False)
     return path
 
@@ -101,3 +101,32 @@ def client(engine, populated):
     app.dependency_overrides[get_session] = override
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def recorder():
+    """A stand-in model family that records the size of every frame it is fitted on.
+
+    Which fold trained on what is not otherwise observable from the outside, and
+    it is the property the training window exists to control.
+    """
+    sizes: list[int] = []
+
+    class Recorder:
+        name = "seasonal_naive"
+
+        def __init__(self, seasonal_period: int):
+            self.seasonal_period = seasonal_period
+
+        def fit(self, history):
+            sizes.append(len(history))
+            return self
+
+        def predict(self, periods, frequency):
+            zeros = [0.0] * periods
+            return pd.DataFrame({
+                "yhat": zeros, "yhat_lower": zeros, "yhat_upper": zeros,
+            })
+
+    Recorder.sizes = sizes
+    return Recorder

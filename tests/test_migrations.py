@@ -16,3 +16,4 @@ def test_migrations_build_the_schema_from_empty(tmp_path, monkeypatch):
 
     inspector = inspect(create_engine(url))
     assert {"series", "observations", "evaluations"} <= set(inspector.get_table_names())
+    assert "max_train" in {column["name"] for column in inspector.get_columns("series")}

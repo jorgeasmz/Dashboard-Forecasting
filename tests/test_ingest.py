@@ -59,3 +59,24 @@ def test_replacing_observations_does_not_accumulate(session, source, history):
     replace_observations(session, series, history)
 
     assert len(load_observations(session, source.slug)) == len(history)
+
+
+def test_a_limit_returns_the_most_recent_observations(session, source, history):
+    """Every caller that sets one wants the end of the series, not the start."""
+    series = upsert_series(session, source)
+    replace_observations(session, series, history)
+
+    stored = load_observations(session, source.slug, limit=10)
+
+    assert len(stored) == 10
+    assert stored["ds"].is_monotonic_increasing
+    assert stored["ds"].iloc[-1] == history["ds"].iloc[-1]
+    assert stored["ds"].iloc[0] == history["ds"].iloc[-10]
+
+
+def test_the_training_window_travels_with_the_series(session, source):
+    from dataclasses import replace
+
+    series = upsert_series(session, replace(source, max_train=8_760))
+
+    assert series.max_train == 8_760

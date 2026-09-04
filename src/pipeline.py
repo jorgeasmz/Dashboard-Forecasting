@@ -1,8 +1,10 @@
 """
 Ingests every registered series and backtests every model family against it.
 
-Usage: python -m src.pipeline
+Usage: python -m src.pipeline [--series SLUG ...]
 """
+
+import argparse
 
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
@@ -22,15 +24,33 @@ def store_evaluations(session: Session, series: Series, results: list[dict]) -> 
     session.commit()
 
 
-def run(session: Session, folds: int = BACKTEST_FOLDS) -> None:
-    print("Ingesting series...")
-    counts = ingest_all(session)
-    for slug, rows in counts.items():
-        print(f"  {slug:<22} {rows:>5} observations")
+def run(
+    session: Session,
+    folds: int = BACKTEST_FOLDS,
+    slugs: list[str] | None = None,
+) -> None:
+    selected = [s for s in SERIES if slugs is None or s.slug in slugs]
 
-    for source in SERIES:
-        print(f"\nBacktesting {source.slug} (horizon {source.horizon}, {folds} folds)...")
+    print("Ingesting series...")
+    counts = ingest_all(session, slugs)
+    for slug, rows in counts.items():
+        if rows is None:
+            print(f"  {slug:<22} skipped, WAREHOUSE_URL is unset")
+        else:
+            print(f"  {slug:<22} {rows:>6} observations")
+
+    for source in selected:
+        # The whole history: the folds are cut from the end of it and each one
+        # applies its own training window.
         history = load_observations(session, source.slug)
+        if history.empty:
+            continue
+
+        window = f", {source.max_train} training window" if source.max_train else ""
+        print(
+            f"\nBacktesting {source.slug} "
+            f"(horizon {source.horizon}, {folds} folds{window})..."
+        )
         results = backtest(history, source, folds)
 
         series = session.query(Series).filter_by(slug=source.slug).one()
@@ -45,8 +65,22 @@ def run(session: Session, folds: int = BACKTEST_FOLDS) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--series",
+        action="append",
+        metavar="SLUG",
+        help="Restrict the run to one series. Repeatable. Defaults to all of them.",
+    )
+    arguments = parser.parse_args()
+
+    known = {source.slug for source in SERIES}
+    unknown = set(arguments.series or []) - known
+    if unknown:
+        parser.error(f"unknown series: {', '.join(sorted(unknown))}")
+
     with SessionLocal() as session:
-        run(session)
+        run(session, slugs=arguments.series)
 
 
 if __name__ == "__main__":

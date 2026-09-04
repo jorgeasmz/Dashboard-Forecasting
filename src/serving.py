@@ -20,7 +20,8 @@ def forecast(
     if series is None:
         raise LookupError(f"Series '{slug}' is not registered.")
 
-    history = load_observations(session, slug)
+    # The same window the backtest scored, so the served fit is the one measured.
+    history = load_observations(session, slug, limit=series.max_train)
     if history.empty:
         raise LookupError(f"Series '{slug}' has no observations.")
 
