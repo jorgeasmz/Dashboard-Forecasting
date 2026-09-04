@@ -57,7 +57,11 @@ def backtest(
 
     results = []
     for fold, cutoff in enumerate(cutoffs):
-        train = history.iloc[:cutoff]
+        # A capped window keeps every fold the same size, which is what makes a
+        # long series affordable, and it is also what the series wants: a price
+        # regime from years ago does not describe the one being forecast.
+        start = max(0, cutoff - source.max_train) if source.max_train else 0
+        train = history.iloc[start:cutoff]
         test = history.iloc[cutoff : cutoff + source.horizon]
         if len(test) < source.horizon:
             continue

@@ -26,6 +26,9 @@ class Series(Base):
     seasonal_period: Mapped[int] = mapped_column(Integer, nullable=False)
     horizon: Mapped[int] = mapped_column(Integer, nullable=False)
     unit: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Observations one fit may train on. Travels with the series so that what is
+    # served is fitted on the same window the backtest scored.
+    max_train: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     observations: Mapped[list["Observation"]] = relationship(
         back_populates="series", cascade="all, delete-orphan"
