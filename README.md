@@ -74,7 +74,7 @@ Coverage is the share of held-out observations that fall inside the 80%
 prediction interval. Every model family emits `yhat_lower` and `yhat_upper`, so
 the figure is comparable across them.
 
-### What the hourly grain costs
+### Fitting cost at the hourly grain
 
 A fold refits every family, so the length of the training set decides whether a
 family can be compared at all. Measured on this machine, one fit at a seasonal
@@ -143,7 +143,7 @@ ranking, and the two families that model a trend are both worse. The same hour o
 the previous day is a strong forecast of this one, and a day-ahead horizon is
 short enough that little else is left to predict.
 
-### The spot price at the daily grain, and what a training window does to MASE
+### The daily spot price and the MASE denominator
 
 The daily series is the one that produced the largest result here, and it is a
 result about the metric rather than about the market.
