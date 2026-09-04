@@ -78,10 +78,19 @@ def list_series(session: SessionDep):
 
 
 @app.get("/series/{slug}/observations", response_model=list[ObservationOut])
-def series_observations(slug: str, session: SessionDep):
-    """The stored history, oldest first."""
+def series_observations(
+    slug: str,
+    session: SessionDep,
+    limit: Annotated[int, Query(ge=1, le=20_000)] = 2_000,
+):
+    """The most recent observations, oldest first.
+
+    The hourly series holds 93,504 of them, which is a response no caller wants by
+    accident, so the tail is bounded. Every other series is shorter than the
+    default and comes back whole.
+    """
     _require_series(session, slug)
-    history = load_observations(session, slug)
+    history = load_observations(session, slug, limit=limit)
     return [ObservationOut(ts=row.ds, value=row.y) for row in history.itertuples()]
 
 

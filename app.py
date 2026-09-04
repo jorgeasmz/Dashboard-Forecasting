@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.config import APP_TITLE, INTERVAL_WIDTH
+from src.config import APP_TITLE, DISPLAY_OBSERVATIONS, INTERVAL_WIDTH
 from src.database import SessionLocal
 from src.ingest import load_observations
 from src.plotting import plot_accuracy, plot_coverage, plot_forecast
@@ -38,7 +38,8 @@ def registered_series() -> list[dict] | None:
 @st.cache_data(ttl=300)
 def series_data(slug: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     with session_factory()() as session:
-        return load_observations(session, slug), aggregate(session, slug)
+        history = load_observations(session, slug, limit=DISPLAY_OBSERVATIONS)
+        return history, aggregate(session, slug)
 
 
 @st.cache_data(ttl=300)
