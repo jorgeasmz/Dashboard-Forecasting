@@ -25,3 +25,20 @@ def test_horizons_leave_room_for_several_folds():
     for source in SERIES:
         assert source.horizon >= 1
         assert source.seasonal_period >= 1
+
+
+def test_the_warehouse_url_drops_a_sqlalchemy_driver_suffix(monkeypatch):
+    """DATABASE_URL carries one and psycopg, which gets this, does not accept it."""
+    from src.config import warehouse_url
+
+    monkeypatch.setenv("WAREHOUSE_URL", "postgresql+psycopg://user:pw@host/db")
+
+    assert warehouse_url() == "postgresql://user:pw@host/db"
+
+
+def test_the_warehouse_url_is_empty_when_unset(monkeypatch):
+    from src.config import warehouse_url
+
+    monkeypatch.delenv("WAREHOUSE_URL", raising=False)
+
+    assert warehouse_url() == ""

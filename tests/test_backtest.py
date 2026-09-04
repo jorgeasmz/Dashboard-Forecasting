@@ -79,3 +79,38 @@ def test_backtest_reports_every_metric(history, source):
     assert set(results[0]) == {
         "model", "fold", "cutoff", "horizon", "mae", "rmse", "mase", "coverage"
     }
+
+
+def _train_sizes(monkeypatch, recorder, history, source, folds):
+    monkeypatch.setattr("src.backtest.build_all", lambda period: [recorder(period)])
+    backtest(history, source, folds=folds)
+    return list(recorder.sizes)
+
+
+def test_folds_expand_when_no_window_is_configured(monkeypatch, recorder, history, source):
+    sizes = _train_sizes(monkeypatch, recorder, history, source, folds=3)
+
+    assert sizes == sorted(sizes) and len(set(sizes)) == len(sizes)
+
+
+def test_a_configured_window_caps_every_fold(monkeypatch, recorder, history, source):
+    """What makes the hourly series affordable, and what keeps folds comparable."""
+    from dataclasses import replace
+
+    sizes = _train_sizes(monkeypatch, recorder, history, replace(source, max_train=24), 3)
+
+    assert sizes == [24, 24, 24]
+
+
+def test_a_window_wider_than_the_history_changes_nothing(
+    monkeypatch, recorder, history, source
+):
+    from dataclasses import replace
+
+    capped = _train_sizes(
+        monkeypatch, recorder, history, replace(source, max_train=10_000), 3
+    )
+    recorder.sizes.clear()
+    uncapped = _train_sizes(monkeypatch, recorder, history, source, 3)
+
+    assert capped == uncapped
