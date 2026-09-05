@@ -272,7 +272,7 @@ is the only change required for a deployment; connection strings in the
 ```bash
 pip install -r requirements-dev.txt
 
-pytest              # 78 tests, 96% coverage of src/ and api/
+pytest              # 79 tests, 94% coverage of src/ and api/
 ruff check .
 ```
 
